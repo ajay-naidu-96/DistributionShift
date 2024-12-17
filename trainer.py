@@ -1,47 +1,52 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
-from torchvision import models, transforms
-from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms, models
 import json
+import os
 
-class CustomDataset(ImageFolder):
-    def __init__(self, root, transform=None):
-        super().__init__(root, transform=transform)
-
+# Define transforms for MNIST
 data_transforms = {
     'train': transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.RandomHorizontalFlip(),
+        transforms.Resize((224, 224)),  # Resizing for compatibility with ResNet input
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize((0.5,), (0.5,))  # Normalization for grayscale images
     ]),
     'val': transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize((0.5,), (0.5,))
     ]),
 }
 
-train_dataset = CustomDataset('./Data/train/', transform=data_transforms['train'])
-val_dataset = CustomDataset('./Data/test/', transform=data_transforms['val'])
+# Load MNIST dataset
+train_dataset = datasets.MNIST(root='./Data/', train=True, transform=data_transforms['train'], download=True)
+val_dataset = datasets.MNIST(root='./Data/', train=False, transform=data_transforms['val'], download=True)
 
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=64)
 
-# Define the models
+# Define the models to train
 models_to_train = {
     'resnet18': models.resnet18(pretrained=False),
     'resnet34': models.resnet34(pretrained=False),
     'resnet50': models.resnet50(pretrained=False),
-    # 'efficientnet_b0': models.efficientnet_b0(pretrained=False),
     'pretrained_resnet18': models.resnet18(weights='ResNet18_Weights.DEFAULT'),
-    'pretrained_resnet34': models.resnet34(pretrained='ResNet34_Weights.DEFAULT'),
+    'pretrained_resnet34': models.resnet34(weights='ResNet34_Weights.DEFAULT'),
     'pretrained_resnet50': models.resnet50(weights='ResNet50_Weights.DEFAULT')
-    # 'efficientnet_b0': models.efficientnet_b0(pretrained=False)
 }
 
+os.makedirs("output/models/", exist_ok=True)
+os.makedirs("output/logs/", exist_ok=True)
+
+# Modify model function
+def modify_model(model, num_classes):
+    # Modify the final fully connected layer to match MNIST's 10 classes
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    return model
+
+# Training function
 def train_model(model, criterion, optimizer, num_epochs=25):
     best_acc = 0.0
     training_results = []
@@ -101,21 +106,18 @@ def train_model(model, criterion, optimizer, num_epochs=25):
 
     return training_results
 
-
+# Training loop for each model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 for model_name, model in models_to_train.items():
-
-    num_classes = 150 
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-
+    # Modify the model for MNIST
+    model = modify_model(model, num_classes=10)
+    model.to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-
     print(f'Training {model_name}...')
-    training_results = train_model(model, criterion, optimizer, 20)
+    training_results = train_model(model, criterion, optimizer, num_epochs=20)
 
     with open(f'output/logs/{model_name}_training_results.json', 'w') as f:
         json.dump(training_results, f)

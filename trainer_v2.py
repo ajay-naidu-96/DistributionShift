@@ -7,7 +7,7 @@ def train_model(model, train_loader, test_loader, model_name, num_epochs=25):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
     best_acc = 0.0
     training_results = []
@@ -15,8 +15,6 @@ def train_model(model, train_loader, test_loader, model_name, num_epochs=25):
     model.to(device)
 
     for epoch in range(num_epochs):
-
-        print("Epoch: {}".format(epoch))
 
         model.train()
 
